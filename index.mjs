@@ -1,4 +1,3 @@
-// index.js
 import express from 'express';
 import { MongoClient } from 'mongodb';
 import dotenv from 'dotenv';
@@ -10,126 +9,185 @@ const port = process.env.PORT || 3000;
 const client1 = new MongoClient(process.env.MONGO_URI_1);
 const client2 = new MongoClient(process.env.MONGO_URI_2);
 
-async function getTodaySales(db) {
-  const start = new Date();
-  start.setHours(0, 0, 0, 0);
-  const end = new Date();
-  end.setHours(23, 59, 59, 999);
+// Targets from ENV
+const target1 = Number(process.env.TARGET_BANGUR) || 500000;
+const target2 = Number(process.env.TARGET_VIKHROLI) || 450000;
 
-  const result = await db.collection('bills').aggregate([
-    { $match: { date: { $gte: start, $lte: end } } },
-    { $group: { _id: null, totalSales: { $sum: "$totalAmount" } } }
-  ]).toArray();
-
-  return result[0]?.totalSales || 0;
+function formatNumber(value, decimals = 2) {
+  return Number(value.toFixed(decimals)).toLocaleString();
 }
 
-async function getDailySales(db) {
-  const start = new Date();
-  start.setDate(1); // Start of month
-  start.setHours(0, 0, 0, 0);
+async function getGrossProfitBreakdown(db) {
+  // category → profit %
+  const profitPercent = {
+    Cake: 0.33,
+    Pastry: 0.3,
+    Savory: 0.3,
+    Trading: 0.15,
+    Other: 0.5,
+    Others: 0.5, // in case some docs use "Others"
+  };
 
-  const end = new Date(start);
-  end.setMonth(start.getMonth() + 1);
-  end.setMilliseconds(-1);
+  // month window
+  const startOfMonth = new Date();
+  startOfMonth.setDate(1);
+  startOfMonth.setHours(0, 0, 0, 0);
 
-  return await db.collection("bills").aggregate([
-    { $match: { date: { $gte: start, $lte: end } } },
+  const endOfMonth = new Date(startOfMonth);
+  endOfMonth.setMonth(startOfMonth.getMonth() + 1);
+  endOfMonth.setMilliseconds(-1);
+
+  return db.collection("bills").aggregate([
+    { $match: { date: { $gte: startOfMonth, $lte: endOfMonth } } },
+    { $unwind: "$cartItems" },
+    {
+      $group: {
+        _id: "$cartItems.category",
+        grossSales: {
+          $sum: { $multiply: ["$cartItems.price", "$cartItems.quantity"] }
+        }
+      }
+    },
+    // Look up category-specific % from the JS object we embedded as a literal
+    {
+      $addFields: {
+        profitPercent: {
+          $ifNull: [
+            { $getField: { field: "$_id", input: { $literal: profitPercent } } },
+            0.3 // default if category not in map
+          ]
+        }
+      }
+    },
+    { $addFields: { profit: { $multiply: ["$grossSales", "$profitPercent"] } } },
+    { $sort: { grossSales: -1 } }
+  ]).toArray();
+}
+
+
+async function getSalesSummary(db) {
+  const today = new Date();
+  const startOfDay = new Date(today.setHours(0, 0, 0, 0));
+  const endOfDay = new Date(today.setHours(23, 59, 59, 999));
+
+  const startOfMonth = new Date();
+  startOfMonth.setDate(1);
+  startOfMonth.setHours(0, 0, 0, 0);
+  const endOfMonth = new Date(startOfMonth);
+  endOfMonth.setMonth(startOfMonth.getMonth() + 1);
+  endOfMonth.setMilliseconds(-1);
+
+  // Fetch both daily and monthly in one go
+  const data = await db.collection('bills').aggregate([
+    { $match: { date: { $gte: startOfMonth, $lte: endOfMonth } } },
     {
       $group: {
         _id: {
           day: { $dayOfMonth: "$date" },
-          month: { $month: "$date" },
-          year: { $year: "$date" },
+          isToday: {
+            $cond: [
+              {
+                $and: [
+                  { $gte: ["$date", startOfDay] },
+                  { $lte: ["$date", endOfDay] }
+                ]
+              }, true, false
+            ]
+          }
         },
         totalSales: { $sum: "$totalAmount" }
       }
     },
-    { $sort: { "_id.year": 1, "_id.month": 1, "_id.day": 1 } }
+    { $sort: { "_id.day": 1 } }
+  ]).toArray();
+
+  // Split into daily sales and today's total
+  let todaySales = 0;
+  let dailySales = [];
+  let monthTotal = 0;
+
+  data.forEach(d => {
+    monthTotal += d.totalSales;
+    if (d._id.isToday) todaySales += d.totalSales;
+    dailySales.push({ day: d._id.day, totalSales: d.totalSales });
+  });
+
+  return { todaySales, monthTotal, dailySales };
+}
+
+async function getPaymentModeBreakdown(db) {
+  const startOfMonth = new Date();
+  startOfMonth.setDate(1);
+  startOfMonth.setHours(0, 0, 0, 0);
+
+  const endOfMonth = new Date(startOfMonth);
+  endOfMonth.setMonth(startOfMonth.getMonth() + 1);
+  endOfMonth.setMilliseconds(-1);
+
+  return await db.collection("bills").aggregate([
+    { $match: { date: { $gte: startOfMonth, $lte: endOfMonth } } },
+    {
+      $group: {
+        _id: "$paymentMode",
+        totalSales: { $sum: "$totalAmount" }
+      }
+    },
+    { $sort: { totalSales: -1 } }
   ]).toArray();
 }
 
 
-async function getMonthSales(db) {
-  const start = new Date();
-  start.setDate(1);             // Start of current month
-  start.setHours(0, 0, 0, 0);
 
-  const end = new Date(start);
-  end.setMonth(start.getMonth() + 1); // First day of next month
-  end.setMilliseconds(-1);           // End of current month
 
-  const result = await db.collection("bills").aggregate([
-    { $match: { date: { $gte: start, $lte: end } } },
-    { $group: { _id: null, totalSales: { $sum: "$totalAmount" } } },
-  ]).toArray();
-
-  return result[0]?.totalSales || 0;
-}
+await Promise.all([client1.connect(), client2.connect()]);
+const db1 = client1.db();
+const db2 = client2.db();
 
 app.get('/sales', async (req, res) => {
   try {
-    await Promise.all([client1.connect(), client2.connect()]);
-    const db1 = client1.db();
-    const db2 = client2.db();
-
-    const [sales1, sales2, monthSales1, monthSales2] = await Promise.all([
-      getTodaySales(db1),
-      getTodaySales(db2),
-      getMonthSales(db1),
-      getMonthSales(db2),
-    ]);
-
-    const [dailySales1, dailySales2] = await Promise.all([
-      getDailySales(db1),
-      getDailySales(db2),
-    ]);
 
 
-    const totalSales = sales1 + sales2;
-    const totalMonthSales = monthSales1 + monthSales2;
+const [s1, s2, p1, p2, g1, g2] = await Promise.all([
+  getSalesSummary(db1),
+  getSalesSummary(db2),
+  getPaymentModeBreakdown(db1),
+  getPaymentModeBreakdown(db2),
+  getGrossProfitBreakdown(db1),
+  getGrossProfitBreakdown(db2)
+]);
 
-    // Monthly Targets
-    const target1 = 500000;
-    const target2 = 450000;
 
-    // Days
     const daysPassed = new Date().getDate();
     const totalDays = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
 
-    // Average per day
-    const avg1 = monthSales1 / daysPassed;
-    const avg2 = monthSales2 / daysPassed;
-
-    // Predicted total sales (end of month)
+    const avg1 = s1.monthTotal / daysPassed;
+    const avg2 = s2.monthTotal / daysPassed;
     const predicted1 = avg1 * totalDays;
     const predicted2 = avg2 * totalDays;
 
-    // Conditional coloring
     const class1 = predicted1 >= target1 ? "green" : "red";
     const class2 = predicted2 >= target2 ? "green" : "red";
 
-    // Build chart data
+    // Merge daily sales by day
     const chartData = [];
-    const maxDays = Math.max(
-      dailySales1.length ? dailySales1[dailySales1.length - 1]._id.day : 0,
-      dailySales2.length ? dailySales2[dailySales2.length - 1]._id.day : 0
+    const maxDay = Math.max(
+      s1.dailySales.length ? s1.dailySales[s1.dailySales.length - 1].day : 0,
+      s2.dailySales.length ? s2.dailySales[s2.dailySales.length - 1].day : 0
     );
 
-    for (let i = 1; i <= maxDays; i++) {
-      const day1 = dailySales1.find(d => d._id.day === i)?.totalSales || 0;
-      const day2 = dailySales2.find(d => d._id.day === i)?.totalSales || 0;
+    for (let i = 1; i <= maxDay; i++) {
+      const day1 = s1.dailySales.find(d => d.day === i)?.totalSales || 0;
+      const day2 = s2.dailySales.find(d => d.day === i)?.totalSales || 0;
       chartData.push({ day: i, Bangur: day1, Vikhroli: day2 });
     }
-
 
     res.send(`
       <html>
         <head>
-          <title>Sales Summary</title>
+          <title>Sales Dashboard</title>
           <style>
             body { font-family: Arial; margin: 2rem; }
-            table { border-collapse: collapse; width: 85%; margin-bottom: 2rem; }
+            table { border-collapse: collapse; width: 90%; margin-bottom: 2rem; }
             th, td { border: 1px solid #ddd; padding: 12px; text-align: center; }
             th { background-color: #f2f2f2; }
             .green { background-color: #c6f6d5; }
@@ -140,40 +198,36 @@ app.get('/sales', async (req, res) => {
           <h2>Today's Sales</h2>
           <table>
             <tr><th>Location</th><th>Sales (₹)</th></tr>
-            <tr><td>Bangur Nagar</td><td>${sales1.toLocaleString()}</td></tr>
-            <tr><td>Vikhroli</td><td>${sales2.toLocaleString()}</td></tr>
-            <tr><th>Total</th><th>${totalSales.toLocaleString()}</th></tr>
+            <tr><td>Bangur Nagar</td><td>${s1.todaySales.toLocaleString()}</td></tr>
+            <tr><td>Vikhroli</td><td>${s2.todaySales.toLocaleString()}</td></tr>
+            <tr><th>Total</th><th>${(s1.todaySales + s2.todaySales).toLocaleString()}</th></tr>
           </table>
 
-          <h2>This Month's Sales (with Prediction)</h2>
+          <h2>This Month's Sales</h2>
           <table>
             <tr>
               <th>Location</th>
               <th>Sales (₹)</th>
               <th>Target (₹)</th>
-              <th>Average Per Day (₹)</th>
-              <th>Predicted Sales (₹)</th>
+              <th>Avg/Day (₹)</th>
+              <th>Predicted (₹)</th>
+              <th>% Achieved</th>
             </tr>
             <tr class="${class1}">
               <td>Bangur Nagar</td>
-              <td>${monthSales1.toLocaleString()}</td>
+              <td>${s1.monthTotal.toLocaleString()}</td>
               <td>${target1.toLocaleString()}</td>
-              <td>${avg1.toFixed(2).toLocaleString()}</td>
-              <td>${predicted1.toFixed(2).toLocaleString()}</td>
+              <td>${formatNumber(avg1)}</td>
+              <td>${formatNumber(predicted1)}</td>
+              <td>${formatNumber((s1.monthTotal / target1) * 100, 1)}%</td>
             </tr>
             <tr class="${class2}">
               <td>Vikhroli</td>
-              <td>${monthSales2.toLocaleString()}</td>
+              <td>${s2.monthTotal.toLocaleString()}</td>
               <td>${target2.toLocaleString()}</td>
-              <td>${avg2.toFixed(2).toLocaleString()}</td>
-              <td>${predicted2.toFixed(2).toLocaleString()}</td>
-            </tr>
-            <tr>
-              <th>Total</th>
-              <th>${totalMonthSales.toLocaleString()}</th>
-              <th>${(target1 + target2).toLocaleString()}</th>
-              <th>${((monthSales1 + monthSales2) / daysPassed).toFixed(2).toLocaleString()}</th>
-              <th>${(predicted1 + predicted2).toFixed(2).toLocaleString()}</th>
+              <td>${formatNumber(avg2)}</td>
+              <td>${formatNumber(predicted2)}</td>
+              <td>${formatNumber((s2.monthTotal / target2) * 100, 1)}%</td>
             </tr>
           </table>
 
@@ -181,8 +235,7 @@ app.get('/sales', async (req, res) => {
           <canvas id="salesChart" width="800" height="400"></canvas>
           <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
           <script>
-            const ctx = document.getElementById('salesChart').getContext('2d');
-            new Chart(ctx, {
+            new Chart(document.getElementById('salesChart').getContext('2d'), {
               type: 'bar',
               data: {
                 labels: ${JSON.stringify(chartData.map(d => d.day))},
@@ -190,43 +243,94 @@ app.get('/sales', async (req, res) => {
                   {
                     label: 'Bangur Nagar',
                     data: ${JSON.stringify(chartData.map(d => d.Bangur))},
-                    backgroundColor: 'rgba(75, 192, 192, 0.6)',
+                    backgroundColor: 'rgba(75, 192, 192, 0.6)'
                   },
                   {
                     label: 'Vikhroli',
                     data: ${JSON.stringify(chartData.map(d => d.Vikhroli))},
-                    backgroundColor: 'rgba(153, 102, 255, 0.6)',
+                    backgroundColor: 'rgba(153, 102, 255, 0.6)'
                   }
                 ]
               },
               options: { responsive: true, plugins: { legend: { position: 'top' } } }
             });
           </script>
-            <h2>Sales Per Day - Table</h2>
-            <table>
-              <tr>
-                <th>Date</th>
-                <th>Bangur Nagar (₹)</th>
-                <th>Vikhroli (₹)</th>
-                <th>Total (₹)</th>
-              </tr>
-              ${chartData.map(row => {
-                const total = row.Bangur + row.Vikhroli;
-                let bgColor = '';
-                if (total > 30000) bgColor = 'style="background-color:#90EE90"'; // green
-                else if (total > 20000) bgColor = 'style="background-color:#FFFF99"'; // yellow
-                else bgColor = 'style="background-color:#FFB6B6"'; // red
 
+          <h2>Sales Per Day - Table</h2>
+          <table>
+            <tr><th>Day</th><th>Bangur (₹)</th><th>Vikhroli (₹)</th><th>Total (₹)</th></tr>
+            ${chartData.map(row => {
+              const total = row.Bangur + row.Vikhroli;
+              let bgColor = '';
+              if (total > 30000) bgColor = 'style="background-color:#90EE90"';
+              else if (total > 20000) bgColor = 'style="background-color:#FFFF99"';
+              else bgColor = 'style="background-color:#FFB6B6"';
+
+              return `
+                <tr ${bgColor}>
+                  <td>${row.day}</td>
+                  <td>${row.Bangur.toLocaleString()}</td>
+                  <td>${row.Vikhroli.toLocaleString()}</td>
+                  <td>${total.toLocaleString()}</td>
+                </tr>
+              `;
+            }).join('')}
+          </table>
+          <p><i>Last updated: ${new Date().toLocaleString()}</i></p>
+
+
+          <h2>Sales Breakdown by Payment Mode (This Month)</h2>
+          <table>
+            <tr>
+              <th>Payment Mode</th>
+              <th>Bangur Nagar (₹)</th>
+              <th>Vikhroli (₹)</th>
+              <th>Total (₹)</th>
+            </tr>
+            ${[...new Set([...p1.map(x => x._id), ...p2.map(x => x._id)])]
+              .map(mode => {
+                const val1 = p1.find(x => x._id === mode)?.totalSales || 0;
+                const val2 = p2.find(x => x._id === mode)?.totalSales || 0;
                 return `
-                  <tr ${bgColor}>
-                    <td>${row.day}</td>
-                    <td>${row.Bangur.toLocaleString()}</td>
-                    <td>${row.Vikhroli.toLocaleString()}</td>
-                    <td>${total.toLocaleString()}</td>
-                  </tr>
-                `;
+                  <tr>
+                    <td>${mode}</td>
+                    <td>${val1.toLocaleString()}</td>
+                    <td>${val2.toLocaleString()}</td>
+                    <td>${(val1 + val2).toLocaleString()}</td>
+                  </tr>`;
               }).join('')}
-            </table>
+          </table>
+
+
+          <h2>Gross Profit Calculator (This Month)</h2>
+          <table>
+            <tr>
+              <th>Category</th>
+              <th>Bangur Nagar (₹)</th>
+              <th>Vikhroli (₹)</th>
+              <th>Total (₹)</th>
+              <th>Gross Bangur Nagar (₹)</th>
+              <th>Gross Vikhroli (₹)</th>
+              <th>Gross Total (₹)</th>
+            </tr>
+            // inside your template
+            ${[...new Set([...g1.map(x => x._id), ...g2.map(x => x._id)])]
+              .map(cat => {
+                const c1 = g1.find(x => x._id === cat) || { grossSales: 0, profit: 0, profitPercent: 0.3 };
+                const c2 = g2.find(x => x._id === cat) || { grossSales: 0, profit: 0, profitPercent: 0.3 };
+                return `
+                  <tr>
+                    <td>${cat}</td>
+                    <td>${c1.grossSales.toLocaleString()}</td>
+                    <td>${c1.profit.toLocaleString()}</td>
+                    <td>${c2.grossSales.toLocaleString()}</td>
+                    <td>${c2.profit.toLocaleString()}</td>
+                    <td>${(c1.grossSales + c2.grossSales).toLocaleString()}</td>
+                    <td>${(c1.profit + c2.profit).toLocaleString()}</td>
+                  </tr>`;
+              }).join('')}
+
+          </table>
 
 
         </body>
@@ -238,8 +342,4 @@ app.get('/sales', async (req, res) => {
   }
 });
 
-
-
-app.listen(port, () => {
-  console.log(`Server running on http://localhost:${port}`);
-});
+app.listen(port, () => console.log(`Server running at http://localhost:${port}`));
