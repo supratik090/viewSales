@@ -181,165 +181,277 @@ const [s1, s2, p1, p2, g1, g2] = await Promise.all([
       chartData.push({ day: i, Bangur: day1, Vikhroli: day2 });
     }
 
-    res.send(`
-      <html>
-        <head>
-          <title>Sales Dashboard</title>
-          <style>
-            body { font-family: Arial; margin: 2rem; }
-            table { border-collapse: collapse; width: 90%; margin-bottom: 2rem; }
-            th, td { border: 1px solid #ddd; padding: 12px; text-align: center; }
-            th { background-color: #f2f2f2; }
-            .green { background-color: #c6f6d5; }
-            .red { background-color: #fed7d7; }
-          </style>
-        </head>
-        <body>
-          <h2>Today's Sales</h2>
-          <table>
-            <tr><th>Location</th><th>Sales (₹)</th></tr>
-            <tr><td>Bangur Nagar</td><td>${s1.todaySales.toLocaleString()}</td></tr>
-            <tr><td>Vikhroli</td><td>${s2.todaySales.toLocaleString()}</td></tr>
-            <tr><th>Total</th><th>${(s1.todaySales + s2.todaySales).toLocaleString()}</th></tr>
-          </table>
+     res.send(`
+         <html>
+           <head>
+             <title>Sales Dashboard</title>
+             <style>
+               body { font-family: Arial; margin: 2rem; }
+               table { border-collapse: collapse; width: 90%; margin-bottom: 2rem; }
+               th, td { border: 1px solid #ddd; padding: 12px; text-align: center; }
+               th { background-color: #f2f2f2; }
+               .green { background-color: #c6f6d5; }
+               .red { background-color: #fed7d7; }
+               summary { font-size: 18px; font-weight: bold; cursor: pointer; padding: 6px; }
+             </style>
+           </head>
+           <body>
+            <h2>Today's Sales</h2>
+            <table style="width:60%; border-collapse:collapse; margin:15px 0; font-family:Arial, sans-serif; font-size:14px; box-shadow:0 2px 6px rgba(0,0,0,0.1);">
+  <thead>
+    <tr style="background:#f2f2f2; color:#333; text-align:left;">
+      <th style="padding:10px;">Location</th>
+      <th style="padding:10px; text-align:right;">Sales (₹)</th>
+    </tr>
+  </thead>
 
-          <h2>This Month's Sales</h2>
-          <table>
-            <tr>
-              <th>Location</th>
-              <th>Sales (₹)</th>
-              <th>Target (₹)</th>
-              <th>Avg/Day (₹)</th>
-              <th>Predicted (₹)</th>
-              <th>% Achieved</th>
-            </tr>
-            <tr class="${class1}">
-              <td>Bangur Nagar</td>
-              <td>${s1.monthTotal.toLocaleString()}</td>
-              <td>${target1.toLocaleString()}</td>
-              <td>${formatNumber(avg1)}</td>
-              <td>${formatNumber(predicted1)}</td>
-              <td>${formatNumber((s1.monthTotal / target1) * 100, 1)}%</td>
-            </tr>
-            <tr class="${class2}">
-              <td>Vikhroli</td>
-              <td>${s2.monthTotal.toLocaleString()}</td>
-              <td>${target2.toLocaleString()}</td>
-              <td>${formatNumber(avg2)}</td>
-              <td>${formatNumber(predicted2)}</td>
-              <td>${formatNumber((s2.monthTotal / target2) * 100, 1)}%</td>
-            </tr>
-          </table>
-
-          <h2>Sales Per Day - Bar Chart</h2>
-          <canvas id="salesChart" width="800" height="400"></canvas>
-          <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-          <script>
-            new Chart(document.getElementById('salesChart').getContext('2d'), {
-              type: 'bar',
-              data: {
-                labels: ${JSON.stringify(chartData.map(d => d.day))},
-                datasets: [
-                  {
-                    label: 'Bangur Nagar',
-                    data: ${JSON.stringify(chartData.map(d => d.Bangur))},
-                    backgroundColor: 'rgba(75, 192, 192, 0.6)'
-                  },
-                  {
-                    label: 'Vikhroli',
-                    data: ${JSON.stringify(chartData.map(d => d.Vikhroli))},
-                    backgroundColor: 'rgba(153, 102, 255, 0.6)'
-                  }
-                ]
-              },
-              options: { responsive: true, plugins: { legend: { position: 'top' } } }
-            });
-          </script>
-
-          <h2>Sales Per Day - Table</h2>
-          <table>
-            <tr><th>Day</th><th>Bangur (₹)</th><th>Vikhroli (₹)</th><th>Total (₹)</th></tr>
-            ${chartData.map(row => {
-              const total = row.Bangur + row.Vikhroli;
-              let bgColor = '';
-              if (total > 30000) bgColor = 'style="background-color:#90EE90"';
-              else if (total > 20000) bgColor = 'style="background-color:#FFFF99"';
-              else bgColor = 'style="background-color:#FFB6B6"';
-
-              return `
-                <tr ${bgColor}>
-                  <td>${row.day}</td>
-                  <td>${row.Bangur.toLocaleString()}</td>
-                  <td>${row.Vikhroli.toLocaleString()}</td>
-                  <td>${total.toLocaleString()}</td>
+              <tbody>
+                <tr style="background:#f9f9f9;">
+                  <td style="padding:10px;">Bangur Nagar</td>
+                  <td style="padding:10px; text-align:right;">${s1.todaySales.toLocaleString()}</td>
                 </tr>
-              `;
-            }).join('')}
-          </table>
-          <p><i>Last updated: ${new Date().toLocaleString()}</i></p>
+                <tr>
+                  <td style="padding:10px;">Vikhroli</td>
+                  <td style="padding:10px; text-align:right;">${s2.todaySales.toLocaleString()}</td>
+                </tr>
+                <tr style="font-weight:bold; background:#eaf7ea;">
+                  <td style="padding:10px;">Total</td>
+                  <td style="padding:10px; text-align:right;">${(s1.todaySales + s2.todaySales).toLocaleString()}</td>
+                </tr>
+              </tbody>
+            </table>
 
 
-          <h2>Sales Breakdown by Payment Mode (This Month)</h2>
-          <table>
-            <tr>
-              <th>Payment Mode</th>
-              <th>Bangur Nagar (₹)</th>
-              <th>Vikhroli (₹)</th>
-              <th>Total (₹)</th>
-            </tr>
-            ${[...new Set([...p1.map(x => x._id), ...p2.map(x => x._id)])]
-              .map(mode => {
-                const val1 = p1.find(x => x._id === mode)?.totalSales || 0;
-                const val2 = p2.find(x => x._id === mode)?.totalSales || 0;
-                return `
-                  <tr>
-                    <td>${mode}</td>
-                    <td>${val1.toLocaleString()}</td>
-                    <td>${val2.toLocaleString()}</td>
-                    <td>${(val1 + val2).toLocaleString()}</td>
-                  </tr>`;
-              }).join('')}
-          </table>
+             <h2>This Month's Sales</h2>
+             <table>
+               <tr>
+                 <th>Location</th>
+                 <th>Sales (₹)</th>
+                 <th>Target (₹)</th>
+                 <th>Avg/Day (₹)</th>
+                 <th>Predicted (₹)</th>
+                 <th>% Achieved</th>
+               </tr>
+               <tr class="${class1}">
+                 <td>Bangur Nagar</td>
+                 <td>${s1.monthTotal.toLocaleString()}</td>
+                 <td>${target1.toLocaleString()}</td>
+                 <td>${formatNumber(avg1)}</td>
+                 <td>${formatNumber(predicted1)}</td>
+                 <td>${formatNumber((s1.monthTotal / target1) * 100, 1)}%</td>
+               </tr>
+               <tr class="${class2}">
+                 <td>Vikhroli</td>
+                 <td>${s2.monthTotal.toLocaleString()}</td>
+                 <td>${target2.toLocaleString()}</td>
+                 <td>${formatNumber(avg2)}</td>
+                 <td>${formatNumber(predicted2)}</td>
+                 <td>${formatNumber((s2.monthTotal / target2) * 100, 1)}%</td>
+               </tr>
+                 <tr style="font-weight:bold; background:#f2f2f2;">
+                   <td>Total</td>
+                   <td>${(s1.monthTotal + s2.monthTotal).toLocaleString()}</td>
+                   <td>${(target1 + target2).toLocaleString()}</td>
+                   <td>${formatNumber(avg1 + avg2)}</td>
+                   <td>${formatNumber(predicted1 + predicted2)}</td>
+                   <td>${formatNumber(((s1.monthTotal + s2.monthTotal) / (target1 + target2)) * 100, 1)}%</td>
+                 </tr>
+             </table>
 
+             <details>
+               <summary>Sales Per Day - Bar Chart</summary>
+               <canvas id="salesChart" width="800" height="400"></canvas>
+               <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+               <script>
+                 new Chart(document.getElementById('salesChart').getContext('2d'), {
+                   type: 'bar',
+                   data: {
+                     labels: ${JSON.stringify(chartData.map(d => d.day))},
+                     datasets: [
+                       {
+                         label: 'Bangur Nagar',
+                         data: ${JSON.stringify(chartData.map(d => d.Bangur))},
+                         backgroundColor: 'rgba(75, 192, 192, 0.6)'
+                       },
+                       {
+                         label: 'Vikhroli',
+                         data: ${JSON.stringify(chartData.map(d => d.Vikhroli))},
+                         backgroundColor: 'rgba(153, 102, 255, 0.6)'
+                       }
+                     ]
+                   },
+                   options: { responsive: true, plugins: { legend: { position: 'top' } } }
+                 });
+               </script>
+             </details>
 
-          <h2>Gross Profit Calculator (This Month)</h2>
-          <table>
-            <tr>
-              <th>Category</th>
-              <th>Bangur Nagar (₹)</th>
-              <th>Vikhroli (₹)</th>
-              <th>Total (₹)</th>
-              <th>Gross Bangur Nagar (₹)</th>
-              <th>Gross Vikhroli (₹)</th>
-              <th>Gross Total (₹)</th>
-            </tr>
-            // inside your template
-            ${[...new Set([...g1.map(x => x._id), ...g2.map(x => x._id)])]
-              .map(cat => {
-                const c1 = g1.find(x => x._id === cat) || { grossSales: 0, profit: 0, profitPercent: 0.3 };
-                const c2 = g2.find(x => x._id === cat) || { grossSales: 0, profit: 0, profitPercent: 0.3 };
-                return `
-                  <tr>
-                    <td>${cat}</td>
-                    <td>${c1.grossSales.toLocaleString()}</td>
-                    <td>${c1.profit.toLocaleString()}</td>
-                    <td>${c2.grossSales.toLocaleString()}</td>
-                    <td>${c2.profit.toLocaleString()}</td>
-                    <td>${(c1.grossSales + c2.grossSales).toLocaleString()}</td>
-                    <td>${(c1.profit + c2.profit).toLocaleString()}</td>
-                  </tr>`;
-              }).join('')}
+             <details>
+               <summary>Sales Per Day - Table</summary>
+               <table>
+                 <tr><th>Day</th><th>Bangur (₹)</th><th>Vikhroli (₹)</th><th>Total (₹)</th></tr>
+                 ${chartData.map(row => {
+                   const total = row.Bangur + row.Vikhroli;
+                   let bgColor = '';
+                   if (total > 30000) bgColor = 'style="background-color:#90EE90"';
+                   else if (total > 20000) bgColor = 'style="background-color:#FFFF99"';
+                   else bgColor = 'style="background-color:#FFB6B6"';
 
-          </table>
+                   return `
+                     <tr ${bgColor}>
+                       <td>${row.day}</td>
+                       <td>${row.Bangur.toLocaleString()}</td>
+                       <td>${row.Vikhroli.toLocaleString()}</td>
+                       <td>${total.toLocaleString()}</td>
+                     </tr>
+                   `;
+                 }).join('')}
+               </table>
+             </details>
 
+             <details>
+                            <summary>Sales Breakdown by Payment Mode </summary>
 
-        </body>
-      </html>
-    `);
-  } catch (err) {
-    console.error(err);
-    res.status(500).send('Something went wrong');
-  }
-});
+             <table>
+               <tr>
+                 <th>Payment Mode</th>
+                 <th>Bangur Nagar (₹)</th>
+                 <th>Vikhroli (₹)</th>
+                 <th>Total (₹)</th>
+               </tr>
+               ${[...new Set([...p1.map(x => x._id), ...p2.map(x => x._id)])]
+                 .map(mode => {
+                   const val1 = p1.find(x => x._id === mode)?.totalSales || 0;
+                   const val2 = p2.find(x => x._id === mode)?.totalSales || 0;
+                   return `
+                     <tr>
+                       <td>${mode}</td>
+                       <td>${val1.toLocaleString()}</td>
+                       <td>${val2.toLocaleString()}</td>
+                       <td>${(val1 + val2).toLocaleString()}</td>
+                     </tr>`;
+                 }).join('')}
+             </table>
+             </details>
+
+             <details>
+               <summary>Net Profit</summary>
+               <table>
+                 <tr>
+                   <th>Location</th>
+                   <th>Gross Profit (₹)</th>
+                   <th>Expense (₹)</th>
+                   <th>Net Profit (₹)</th>
+                   <th>Net %</th>
+                 </tr>
+                 ${
+                   (() => {
+                     const totalBangurProfit = g1.reduce((sum, x) => sum + (x.profit || 0), 0);
+                     const totalVikhroliProfit = g2.reduce((sum, x) => sum + (x.profit || 0), 0);
+                     const bangurExpense = 110000;
+                     const vikhroliExpense = 74000;
+                     const bangurNet = totalBangurProfit - bangurExpense;
+                     const vikhroliNet = totalVikhroliProfit - vikhroliExpense;
+                     const bangurNetPct = totalBangurProfit ? ((bangurNet / totalBangurProfit) * 100).toFixed(2) : 0;
+                     const vikhroliNetPct = totalVikhroliProfit ? ((vikhroliNet / totalVikhroliProfit) * 100).toFixed(2) : 0;
+                     const totalGross = totalBangurProfit + totalVikhroliProfit;
+                     const totalExpense = bangurExpense + vikhroliExpense;
+                     const totalNet = bangurNet + vikhroliNet;
+                     const totalPct = totalGross ? ((totalNet / totalGross) * 100).toFixed(2) : 0;
+
+                     const formatRow = (loc, gross, expense, net, pct) => `
+                       <tr style="color:${net < 0 ? 'red' : 'green'}; font-weight:bold;">
+                         <td>${loc}</td>
+                         <td>${gross.toLocaleString()}</td>
+                         <td>${expense.toLocaleString()}</td>
+                         <td>${net.toLocaleString()}</td>
+                         <td>${pct}%</td>
+                       </tr>
+                     `;
+
+                     return `
+                       ${formatRow("Bangur Nagar", totalBangurProfit, bangurExpense, bangurNet, bangurNetPct)}
+                       ${formatRow("Vikhroli", totalVikhroliProfit, vikhroliExpense, vikhroliNet, vikhroliNetPct)}
+                       <tr style="background:#f2f2f2; font-weight:bold; color:${totalNet < 0 ? 'red' : 'green'};">
+                         <td>Total</td>
+                         <td>${totalGross.toLocaleString()}</td>
+                         <td>${totalExpense.toLocaleString()}</td>
+                         <td>${totalNet.toLocaleString()}</td>
+                         <td>${totalPct}%</td>
+                       </tr>
+                     `;
+                   })()
+                 }
+               </table>
+             </details>
+
+             <details>
+               <summary>Gross Profit Calculator (This Month)</summary>
+               <table>
+                 <tr>
+                   <th>Category</th>
+                   <th>Bangur Nagar (₹)</th>
+                   <th>Gross Bangur Nagar (₹)</th>
+                   <th>Vikhroli (₹)</th>
+                   <th>Gross Vikhroli (₹)</th>
+                   <th>Total (₹)</th>
+                   <th>Gross Total (₹)</th>
+                 </tr>
+                 ${
+                   (() => {
+                     let totalBangurGross = 0, totalBangurProfit = 0;
+                     let totalVikhroliGross = 0, totalVikhroliProfit = 0;
+
+                     const rows = [...new Set([...g1.map(x => x._id), ...g2.map(x => x._id)])]
+                       .map(cat => {
+                         const c1 = g1.find(x => x._id === cat) || { grossSales: 0, profit: 0 };
+                         const c2 = g2.find(x => x._id === cat) || { grossSales: 0, profit: 0 };
+
+                         totalBangurGross += c1.grossSales;
+                         totalBangurProfit += c1.profit;
+                         totalVikhroliGross += c2.grossSales;
+                         totalVikhroliProfit += c2.profit;
+
+                         return `
+                           <tr>
+                             <td>${cat}</td>
+                             <td>${c1.grossSales.toLocaleString()}</td>
+                             <td>${c1.profit.toLocaleString()}</td>
+                             <td>${c2.grossSales.toLocaleString()}</td>
+                             <td>${c2.profit.toLocaleString()}</td>
+                             <td>${(c1.grossSales + c2.grossSales).toLocaleString()}</td>
+                             <td>${(c1.profit + c2.profit).toLocaleString()}</td>
+                           </tr>
+                         `;
+                       }).join('');
+
+                     const grandGross = totalBangurGross + totalVikhroliGross;
+                     const grandProfit = totalBangurProfit + totalVikhroliProfit;
+
+                     const totalsRow = `
+                       <tr style="font-weight:bold; background:#f2f2f2">
+                         <td>Total</td>
+                         <td>${totalBangurGross.toLocaleString()}</td>
+                         <td>${totalBangurProfit.toLocaleString()}</td>
+                         <td>${totalVikhroliGross.toLocaleString()}</td>
+                         <td>${totalVikhroliProfit.toLocaleString()}</td>
+                         <td>${grandGross.toLocaleString()}</td>
+                         <td>${grandProfit.toLocaleString()}</td>
+                       </tr>
+                     `;
+                     return rows + totalsRow;
+                   })()
+                 }
+               </table>
+             </details>
+
+             <p><i>Last updated: ${new Date().toLocaleString()}</i></p>
+           </body>
+         </html>
+       `);
+     } catch (err) {
+       console.error(err);
+       res.status(500).send('Something went wrong');
+     }
+   });
 
 app.listen(port, () => console.log(`Server running at http://localhost:${port}`));
