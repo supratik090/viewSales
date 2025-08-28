@@ -17,7 +17,7 @@ function formatNumber(value, decimals = 2) {
   return Number(value.toFixed(decimals)).toLocaleString();
 }
 
-async function getGrossProfitBreakdown(db) {
+async function getGrossProfitBreakdown(db,startOfMonth, endOfMonth ){
   // category → profit %
   const profitPercent = {
     Cake: 0.33,
@@ -28,14 +28,7 @@ async function getGrossProfitBreakdown(db) {
     Others: 0.5, // in case some docs use "Others"
   };
 
-  // month window
-  const startOfMonth = new Date();
-  startOfMonth.setDate(1);
-  startOfMonth.setHours(0, 0, 0, 0);
 
-  const endOfMonth = new Date(startOfMonth);
-  endOfMonth.setMonth(startOfMonth.getMonth() + 1);
-  endOfMonth.setMilliseconds(-1);
 
   return db.collection("bills").aggregate([
     { $match: { date: { $gte: startOfMonth, $lte: endOfMonth } } },
@@ -65,17 +58,12 @@ async function getGrossProfitBreakdown(db) {
 }
 
 
-async function getSalesSummary(db) {
+async function getSalesSummary(db,startOfMonth, endOfMonth) {
   const today = new Date();
   const startOfDay = new Date(today.setHours(0, 0, 0, 0));
   const endOfDay = new Date(today.setHours(23, 59, 59, 999));
 
-  const startOfMonth = new Date();
-  startOfMonth.setDate(1);
-  startOfMonth.setHours(0, 0, 0, 0);
-  const endOfMonth = new Date(startOfMonth);
-  endOfMonth.setMonth(startOfMonth.getMonth() + 1);
-  endOfMonth.setMilliseconds(-1);
+
 
   // Fetch both daily and monthly in one go
   const data = await db.collection('bills').aggregate([
@@ -115,14 +103,8 @@ async function getSalesSummary(db) {
   return { todaySales, monthTotal, dailySales };
 }
 
-async function getPaymentModeBreakdown(db) {
-  const startOfMonth = new Date();
-  startOfMonth.setDate(1);
-  startOfMonth.setHours(0, 0, 0, 0);
+async function getPaymentModeBreakdown(db,startOfMonth, endOfMonth) {
 
-  const endOfMonth = new Date(startOfMonth);
-  endOfMonth.setMonth(startOfMonth.getMonth() + 1);
-  endOfMonth.setMilliseconds(-1);
 
   return await db.collection("bills").aggregate([
     { $match: { date: { $gte: startOfMonth, $lte: endOfMonth } } },
@@ -143,17 +125,36 @@ await Promise.all([client1.connect(), client2.connect()]);
 const db1 = client1.db();
 const db2 = client2.db();
 
+function getMonthRange(monthParam) {
+  let year, month;
+  if (monthParam) {
+    [year, month] = monthParam.split("-").map(Number); // e.g. "2025-08"
+    month = month - 1; // JS Date month is 0-indexed
+  } else {
+    const now = new Date();
+    year = now.getFullYear();
+    month = now.getMonth();
+  }
+
+  const startOfMonth = new Date(year, month, 1, 0, 0, 0, 0);
+  const endOfMonth = new Date(year, month + 1, 0, 23, 59, 59, 999);
+
+  return { startOfMonth, endOfMonth, year, month: month + 1 };
+}
+
+
 app.get('/sales', async (req, res) => {
   try {
-
+ const { month: monthParam } = req.query;
+    const { startOfMonth, endOfMonth, year, month } = getMonthRange(monthParam);
 
 const [s1, s2, p1, p2, g1, g2] = await Promise.all([
-  getSalesSummary(db1),
-  getSalesSummary(db2),
-  getPaymentModeBreakdown(db1),
-  getPaymentModeBreakdown(db2),
-  getGrossProfitBreakdown(db1),
-  getGrossProfitBreakdown(db2)
+  getSalesSummary(db1,startOfMonth, endOfMonth),
+  getSalesSummary(db2,startOfMonth, endOfMonth),
+  getPaymentModeBreakdown(db1,startOfMonth, endOfMonth),
+  getPaymentModeBreakdown(db2,startOfMonth, endOfMonth),
+  getGrossProfitBreakdown(db1,startOfMonth, endOfMonth),
+  getGrossProfitBreakdown(db2,startOfMonth, endOfMonth)
 ]);
 
 
@@ -196,6 +197,12 @@ const [s1, s2, p1, p2, g1, g2] = await Promise.all([
              </style>
            </head>
            <body>
+           <form method="GET" action="/sales" style="margin-bottom:20px;">
+             <label for="month">Select Month: </label>
+             <input type="month" id="month" name="month" value="${year}-${String(month).padStart(2, '0')}" />
+             <button type="submit">Go</button>
+           </form>
+
             <h2>Today's Sales</h2>
             <table style="width:60%; border-collapse:collapse; margin:15px 0; font-family:Arial, sans-serif; font-size:14px; box-shadow:0 2px 6px rgba(0,0,0,0.1);">
   <thead>
