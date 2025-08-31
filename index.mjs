@@ -20,11 +20,11 @@ function formatNumber(value, decimals = 2) {
 async function getGrossProfitBreakdown(db,startOfMonth, endOfMonth ){
   // category → profit %
   const profitPercent = {
-    Cake: 0.33,
-    Pastry: 0.3,
+    Cake: 0.25,
+    Pastry: 0.25,
     Savory: 0.3,
     Trading: 0.15,
-    Other: 0.5,
+    Other: 0.6,
     Others: 0.5, // in case some docs use "Others"
   };
 
