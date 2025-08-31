@@ -25,7 +25,7 @@ async function getGrossProfitBreakdown(db,startOfMonth, endOfMonth ){
     Savory: 0.3,
     Trading: 0.15,
     Other: 0.6,
-    Others: 0.5, // in case some docs use "Others"
+    Others: 0.6, // in case some docs use "Others"
   };
 
 
@@ -166,8 +166,8 @@ const [s1, s2, p1, p2, g1, g2] = await Promise.all([
     const predicted1 = avg1 * totalDays;
     const predicted2 = avg2 * totalDays;
 
-    const class1 = predicted1 >= target1 ? "green" : "red";
-    const class2 = predicted2 >= target2 ? "green" : "red";
+    const class1 = target1  >=predicted1  ? "green" : "red";
+    const class2 = target2 >=predicted2  ? "green" : "red";
 
     // Merge daily sales by day
     const chartData = [];
@@ -300,15 +300,25 @@ const [s1, s2, p1, p2, g1, g2] = await Promise.all([
                    const total = row.Bangur + row.Vikhroli;
                    let bgColor = '';
                    if (total > 30000) bgColor = 'style="background-color:#90EE90"';
-                   else if (total > 20000) bgColor = 'style="background-color:#FFFF99"';
+                   else if (total > 24100) bgColor = 'style="background-color:#FFFF99"';
                    else bgColor = 'style="background-color:#FFB6B6"';
 
+
+                    let bgColorMB = '';
+                   if (row.Bangur > 14200) bgColorMB = 'style="background-color:#90EE90"';
+                   else  bgColorMB = 'style="background-color:#FFB6B6"';
+
+                    let bgColorMV = '';
+                   if (row.Vikhroli > 9900) bgColorMV = 'style="background-color:#90EE90"';
+                   else  bgColorMV = 'style="background-color:#FFB6B6"';
+
+
                    return `
-                     <tr ${bgColor}>
+                     <tr >
                        <td>${row.day}</td>
-                       <td>${row.Bangur.toLocaleString()}</td>
-                       <td>${row.Vikhroli.toLocaleString()}</td>
-                       <td>${total.toLocaleString()}</td>
+                       <td ${bgColorMB}>${row.Bangur.toLocaleString()}</td>
+                       <td ${bgColorMV}>${row.Vikhroli.toLocaleString()}</td>
+                       <td ${bgColor} >${total.toLocaleString()}</td>
                      </tr>
                    `;
                  }).join('')}
@@ -354,7 +364,7 @@ const [s1, s2, p1, p2, g1, g2] = await Promise.all([
                    (() => {
                      const totalBangurProfit = g1.reduce((sum, x) => sum + (x.profit || 0), 0);
                      const totalVikhroliProfit = g2.reduce((sum, x) => sum + (x.profit || 0), 0);
-                     const bangurExpense = 110000;
+                     const bangurExpense = 105000;
                      const vikhroliExpense = 74000;
                      const bangurNet = totalBangurProfit - bangurExpense;
                      const vikhroliNet = totalVikhroliProfit - vikhroliExpense;
