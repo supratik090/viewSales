@@ -549,6 +549,23 @@ console.log("Calling database ");
                  window.location.reload();
                }, 45000);
              </script>
+             <style>
+             details {
+               font-size: 14px; /* keep same as tables/body */
+             }
+
+             details summary {
+               font-size: 16px; /* only summary slightly bigger */
+               font-weight: bold;
+               cursor: pointer;
+               padding: 6px;
+             }
+
+             details[open] {
+               font-size: 14px; /* prevent auto expansion effect */
+             }
+
+             </style>
            </body>
          </html>
        `);
