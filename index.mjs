@@ -269,7 +269,7 @@ console.log("Calling database ");
                        })}
                   </td>
        <td>
-                              ${b.cartItems.map(i => `${i.name }`)}
+                            ${b.cartItems.map(i => `<span>${i.name}</span>`).join(", ")}
                          </td>
                     <td>${b.totalAmount.toLocaleString()}</td>
                     <td>${b.paymentMode}</td>
@@ -296,7 +296,7 @@ console.log("Calling database ");
                     </td>
 
                                           <td>
-                                                ${b.cartItems.map(i => `${i.name }`)}
+                                               ${b.cartItems.map(i => `<span>${i.name}</span>`).join(", ")}
                                            </td>
                     <td>${b.totalAmount.toLocaleString()}</td>
                     <td>${b.paymentMode}</td>
