@@ -17,6 +17,19 @@ function formatNumber(value, decimals = 2) {
   return Number(value.toFixed(decimals)).toLocaleString();
 }
 
+async function getLastBills(db) {
+  const startOfDay = new Date();
+  startOfDay.setHours(0, 0, 0, 0);
+  const endOfDay = new Date();
+  endOfDay.setHours(23, 59, 59, 999);
+
+  return db.collection("bills").find(
+    { date: { $gte: startOfDay, $lte: endOfDay } },
+    { sort: { date: -1 }, limit: 5 }
+  ).toArray();
+}
+
+
 async function getGrossProfitBreakdown(db,startOfMonth, endOfMonth ){
   // category → profit %
   const profitPercent = {
@@ -139,6 +152,9 @@ function getMonthRange(monthParam) {
   const startOfMonth = new Date(year, month, 1, 0, 0, 0, 0);
   const endOfMonth = new Date(year, month + 1, 0, 23, 59, 59, 999);
 
+
+
+
   return { startOfMonth, endOfMonth, year, month: month + 1 };
 }
 
@@ -148,14 +164,19 @@ app.get('/sales', async (req, res) => {
  const { month: monthParam } = req.query;
     const { startOfMonth, endOfMonth, year, month } = getMonthRange(monthParam);
 
-const [s1, s2, p1, p2, g1, g2] = await Promise.all([
+const [s1, s2, p1, p2, g1, g2, lastBills1, lastBills2] = await Promise.all([
   getSalesSummary(db1,startOfMonth, endOfMonth),
   getSalesSummary(db2,startOfMonth, endOfMonth),
   getPaymentModeBreakdown(db1,startOfMonth, endOfMonth),
   getPaymentModeBreakdown(db2,startOfMonth, endOfMonth),
   getGrossProfitBreakdown(db1,startOfMonth, endOfMonth),
-  getGrossProfitBreakdown(db2,startOfMonth, endOfMonth)
+  getGrossProfitBreakdown(db2,startOfMonth, endOfMonth),
+  getLastBills(db1),
+  getLastBills(db2),
+
 ]);
+
+console.log("Calling database ");
 
 
     const daysPassed = new Date().getDate();
@@ -228,8 +249,55 @@ const [s1, s2, p1, p2, g1, g2] = await Promise.all([
               </tbody>
             </table>
 
+            <details closed>
+              <summary>Last 5 Bills (Today)</summary>
 
-             <h2>This Month's Sales</h2>
+              <h3>Bangur Nagar</h3>
+              <table>
+                <tr>
+                  <th>Time</th>
+                  <th>Cart Items</th>
+                  <th>Amount (₹)</th>
+                  <th>Payment Mode</th>
+                 </tr>
+                ${lastBills1.map(b => `
+                  <tr>
+                    <td>${new Date(b.date).toLocaleTimeString()}</td>
+                        <td>
+                              ${b.cartItems.map(i => `${i.name }`)}
+                         </td>
+                    <td>${b.totalAmount.toLocaleString()}</td>
+                    <td>${b.paymentMode}</td>
+                   </tr>
+                `).join('')}
+              </table>
+
+              <h3>Vikhroli</h3>
+              <table>
+                <tr>
+                  <th>Time</th>
+                  <th>Cart Items</th>
+                  <th>Amount (₹)</th>
+                  <th>Payment Mode</th>
+                </tr>
+                ${lastBills2.map(b => `
+                  <tr>
+                    <td>${new Date(b.date).toLocaleTimeString()}</td>
+                                          <td>
+                                                ${b.cartItems.map(i => `${i.name }`)}
+                                           </td>
+                    <td>${b.totalAmount.toLocaleString()}</td>
+                    <td>${b.paymentMode}</td>
+                  </tr>
+                `).join('')}
+              </table>
+            </details>
+
+
+
+            <details closed>
+              <summary>This Month's Sales</summary>
+
              <table>
                <tr>
                  <th>Location</th>
@@ -264,6 +332,7 @@ const [s1, s2, p1, p2, g1, g2] = await Promise.all([
                    <td>${formatNumber(((s1.monthTotal + s2.monthTotal) / (target1 + target2)) * 100, 1)}%</td>
                  </tr>
              </table>
+            </details>
 
              <details>
                <summary>Sales Per Day - Bar Chart</summary>
@@ -462,6 +531,12 @@ const [s1, s2, p1, p2, g1, g2] = await Promise.all([
              </details>
 
              <p><i>Last updated: ${new Date().toLocaleString()}</i></p>
+             <script>
+               // Auto refresh every 30 seconds
+               setTimeout(() => {
+                 window.location.reload();
+               }, 30000);
+             </script>
            </body>
          </html>
        `);
