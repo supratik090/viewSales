@@ -262,8 +262,13 @@ console.log("Calling database ");
                  </tr>
                 ${lastBills1.map(b => `
                   <tr>
-                    <td>${new Date(b.date).toLocaleTimeString()}</td>
-                        <td>
+                  <td>${new Date(b.date).toLocaleTimeString("en-IN", {
+                         timeZone: "Asia/Kolkata",
+                         hour: "2-digit",
+                         minute: "2-digit"
+                       })}
+                  </td>
+       <td>
                               ${b.cartItems.map(i => `${i.name }`)}
                          </td>
                     <td>${b.totalAmount.toLocaleString()}</td>
@@ -282,7 +287,14 @@ console.log("Calling database ");
                 </tr>
                 ${lastBills2.map(b => `
                   <tr>
-                    <td>${new Date(b.date).toLocaleTimeString()}</td>
+
+                    <td>${new Date(b.date).toLocaleTimeString("en-IN", {
+                           timeZone: "Asia/Kolkata",
+                           hour: "2-digit",
+                           minute: "2-digit"
+                         })}
+                    </td>
+
                                           <td>
                                                 ${b.cartItems.map(i => `${i.name }`)}
                                            </td>
