@@ -532,10 +532,10 @@ console.log("Calling database ");
 
              <p><i>Last updated: ${new Date().toLocaleString()}</i></p>
              <script>
-               // Auto refresh every 30 seconds
+
                setTimeout(() => {
                  window.location.reload();
-               }, 30000);
+               }, 45000);
              </script>
            </body>
          </html>
