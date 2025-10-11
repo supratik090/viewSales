@@ -37,8 +37,8 @@ async function getGrossProfitBreakdown(db,startOfMonth, endOfMonth ){
     Pastry: 0.25,
     Savory: 0.3,
     Trading: 0.15,
-    Other: 0.6,
-    Others: 0.6, // in case some docs use "Others"
+    Other: .6,
+    Others:.6 , // in case some docs use "Others"
   };
 
 
@@ -159,12 +159,29 @@ function getMonthRange(monthParam) {
 }
 
 
+async function getMonthTotalReturns(db, startOfMonth, endOfMonth) {
+  const result = await db.collection('returns').aggregate([
+    { $match: { returnDate: { $gte: startOfMonth, $lte: endOfMonth } } },
+    {
+      $group: {
+        _id: null,
+        monthTotalReturns: { $sum: "$deductedAmount" } // or "totalAmount" if needed
+      }
+    }
+  ]).toArray();
+
+  // Return total or 0 if no returns found
+  return result.length ? result[0].monthTotalReturns : 0;
+}
+
+
+
 app.get('/sales', async (req, res) => {
   try {
  const { month: monthParam } = req.query;
     const { startOfMonth, endOfMonth, year, month } = getMonthRange(monthParam);
 
-const [s1, s2, p1, p2, g1, g2, lastBills1, lastBills2] = await Promise.all([
+const [s1, s2, p1, p2, g1, g2, lastBills1, lastBills2,r1,r2] = await Promise.all([
   getSalesSummary(db1,startOfMonth, endOfMonth),
   getSalesSummary(db2,startOfMonth, endOfMonth),
   getPaymentModeBreakdown(db1,startOfMonth, endOfMonth),
@@ -173,22 +190,47 @@ const [s1, s2, p1, p2, g1, g2, lastBills1, lastBills2] = await Promise.all([
   getGrossProfitBreakdown(db2,startOfMonth, endOfMonth),
   getLastBills(db1),
   getLastBills(db2),
+   getMonthTotalReturns(db1, startOfMonth, endOfMonth), // returns total for Bangur
+  getMonthTotalReturns(db2, startOfMonth, endOfMonth)
 
 ]);
 
 console.log("Calling database ");
 
+// Set selected month/year from date picker (getMonthRange)
+const selectedYear = year;
+const selectedMonth = month - 1; // convert 1-indexed month to 0-indexed
 
-    const daysPassed = new Date().getDate();
-    const totalDays = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
+// Current date info
+const now = new Date();
+const currentYear = now.getFullYear();
+const currentMonth = now.getMonth(); // 0-indexed
+
+// Check if we are in the current month
+const isCurrentMonth = selectedYear === currentYear && selectedMonth === currentMonth;
+
+// Compute total days in selected month
+const totalDays = new Date(selectedYear, selectedMonth + 1, 0).getDate();
+
+// Determine days passed
+let daysPassed;
+if (selectedYear > currentYear || (selectedYear === currentYear && selectedMonth > currentMonth)) {
+  daysPassed = 0; // future month
+} else if (isCurrentMonth) {
+  daysPassed = now.getDate();
+} else {
+  daysPassed = totalDays; // past months
+}
+
 
     const avg1 = s1.monthTotal / daysPassed;
     const avg2 = s2.monthTotal / daysPassed;
     const predicted1 = avg1 * totalDays;
     const predicted2 = avg2 * totalDays;
 
-    const class1 = target1  >=predicted1  ? "green" : "red";
-    const class2 = target2 >=predicted2  ? "green" : "red";
+    const class1 = predicted1 >= target1 ? "green" : "red";
+    const class2 = predicted2 >= target2 ? "green" : "red";
+
 
     // Merge daily sales by day
     const chartData = [];
@@ -438,6 +480,7 @@ console.log("Calling database ");
                    <th>Location</th>
                    <th>Gross Profit (₹)</th>
                    <th>Expense (₹)</th>
+                    <th>Returns (₹)</th>
                    <th>Net Profit (₹)</th>
                    <th>Net %</th>
                  </tr>
@@ -445,34 +488,41 @@ console.log("Calling database ");
                    (() => {
                      const totalBangurProfit = g1.reduce((sum, x) => sum + (x.profit || 0), 0);
                      const totalVikhroliProfit = g2.reduce((sum, x) => sum + (x.profit || 0), 0);
-                     const bangurExpense = 105000;
-                     const vikhroliExpense = 74000;
-                     const bangurNet = totalBangurProfit - bangurExpense;
-                     const vikhroliNet = totalVikhroliProfit - vikhroliExpense;
+                     const bangurExpense = 100000;
+                     const vikhroliExpense = 70000;
+
+                     const bangurReturns = r1;
+                     const vikhroliReturns = r2;
+
+                     const bangurNet = totalBangurProfit - bangurExpense -bangurReturns;
+                     const vikhroliNet = totalVikhroliProfit - vikhroliExpense- vikhroliReturns;
                      const bangurNetPct = totalBangurProfit ? ((bangurNet / totalBangurProfit) * 100).toFixed(2) : 0;
                      const vikhroliNetPct = totalVikhroliProfit ? ((vikhroliNet / totalVikhroliProfit) * 100).toFixed(2) : 0;
                      const totalGross = totalBangurProfit + totalVikhroliProfit;
                      const totalExpense = bangurExpense + vikhroliExpense;
+                      const totalReturns = bangurReturns + vikhroliReturns;
                      const totalNet = bangurNet + vikhroliNet;
                      const totalPct = totalGross ? ((totalNet / totalGross) * 100).toFixed(2) : 0;
 
-                     const formatRow = (loc, gross, expense, net, pct) => `
+                     const formatRow = (loc, gross, expense,returns, net, pct) => `
                        <tr style="color:${net < 0 ? 'red' : 'green'}; font-weight:bold;">
                          <td>${loc}</td>
                          <td>${gross.toLocaleString()}</td>
                          <td>${expense.toLocaleString()}</td>
+                         <td>${returns.toLocaleString()}</td>
                          <td>${net.toLocaleString()}</td>
                          <td>${pct}%</td>
                        </tr>
                      `;
 
                      return `
-                       ${formatRow("Bangur Nagar", totalBangurProfit, bangurExpense, bangurNet, bangurNetPct)}
-                       ${formatRow("Vikhroli", totalVikhroliProfit, vikhroliExpense, vikhroliNet, vikhroliNetPct)}
+                       ${formatRow("Bangur Nagar", totalBangurProfit, bangurExpense,bangurReturns, bangurNet, bangurNetPct)}
+                       ${formatRow("Vikhroli", totalVikhroliProfit, vikhroliExpense,vikhroliReturns, vikhroliNet, vikhroliNetPct)}
                        <tr style="background:#f2f2f2; font-weight:bold; color:${totalNet < 0 ? 'red' : 'green'};">
                          <td>Total</td>
                          <td>${totalGross.toLocaleString()}</td>
                          <td>${totalExpense.toLocaleString()}</td>
+                         <td>${totalReturns.toLocaleString()}</td>
                          <td>${totalNet.toLocaleString()}</td>
                          <td>${totalPct}%</td>
                        </tr>
