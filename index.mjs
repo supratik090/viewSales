@@ -190,6 +190,7 @@ async function getMonthAdjustment(db, startOfMonth, endOfMonth) {
 
 
 
+
 app.get('/sales', async (req, res) => {
   try {
  const { month: monthParam } = req.query;
@@ -260,6 +261,70 @@ if (selectedYear > currentYear || (selectedYear === currentYear && selectedMonth
       const day2 = s2.dailySales.find(d => d.day === i)?.totalSales || 0;
       chartData.push({ day: i, Bangur: day1, Vikhroli: day2 });
     }
+
+
+
+async function getLastYearMonthSales(db, startOfMonth, endOfMonth) {
+  // Shift dates back by 1 year
+  const startLastYear = new Date(startOfMonth);
+  startLastYear.setFullYear(startLastYear.getFullYear() - 1);
+  const endLastYear = new Date(endOfMonth);
+  endLastYear.setFullYear(endLastYear.getFullYear() - 1);
+
+  const data = await db.collection('past_sales').aggregate([
+    { $match: { date: { $gte: startLastYear, $lte: endLastYear } } },
+    {
+      $group: {
+        _id: { day: { $dayOfMonth: "$date" } },
+        sales: { $sum: "$sales" }
+      }
+    },
+    { $sort: { "_id.day": 1 } }
+  ]).toArray();
+
+  // Convert to a day → sales map
+  const daySalesMap = {};
+  data.forEach(d => {
+    daySalesMap[d._id.day] = d.sales;
+  });
+
+  // Total sales last year
+  const totalLastYear = data.reduce((sum, d) => sum + d.sales, 0);
+
+  return { daySalesMap, totalLastYear };
+}
+
+const [lastYearBangur,lastYearVikhroli] = await Promise.all([
+  getLastYearMonthSales(db1, startOfMonth, endOfMonth),0
+]);
+
+const chartWithLastYear = chartData.map(d => ({
+  day: d.day,
+  Bangur: d.Bangur,
+  Vikhroli: d.Vikhroli,
+  BangurLastYear: lastYearBangur.daySalesMap[d.day] || 0,
+  VikhroliLastYear:0,
+
+}));
+
+
+// Create full month template
+const chartFullMonth = [];
+for (let day = 1; day <= totalDays; day++) {
+
+  const lastYearBangurSales = lastYearBangur.daySalesMap[day] || 0;
+  chartFullMonth.push({
+    day,
+    BangurLastYear: lastYearBangurSales,
+  });
+}
+let ly1 = 0;
+
+chartFullMonth.forEach(row => {
+  ly1 += row.BangurLastYear;
+});
+
+
 
      res.send(`
          <html>
@@ -375,6 +440,7 @@ if (selectedYear > currentYear || (selectedYear === currentYear && selectedMonth
                  <th>Target (₹)</th>
                  <th>Avg/Day (₹)</th>
                  <th>Predicted (₹)</th>
+                 <th>Last year(₹)</th>
                  <th>% Achieved</th>
                </tr>
                <tr class="${class1}">
@@ -383,6 +449,7 @@ if (selectedYear > currentYear || (selectedYear === currentYear && selectedMonth
                  <td>${target1.toLocaleString()}</td>
                  <td>${formatNumber(avg1)}</td>
                  <td>${formatNumber(predicted1)}</td>
+                 <td>${formatNumber(ly1)}</td>
                  <td>${formatNumber((s1.monthTotal / target1) * 100, 1)}%</td>
                </tr>
                <tr class="${class2}">
@@ -391,6 +458,7 @@ if (selectedYear > currentYear || (selectedYear === currentYear && selectedMonth
                  <td>${target2.toLocaleString()}</td>
                  <td>${formatNumber(avg2)}</td>
                  <td>${formatNumber(predicted2)}</td>
+                  <td>Nan</td>
                  <td>${formatNumber((s2.monthTotal / target2) * 100, 1)}%</td>
                </tr>
                  <tr style="font-weight:bold; background:#f2f2f2;">
@@ -399,10 +467,92 @@ if (selectedYear > currentYear || (selectedYear === currentYear && selectedMonth
                    <td>${(target1 + target2).toLocaleString()}</td>
                    <td>${formatNumber(avg1 + avg2)}</td>
                    <td>${formatNumber(predicted1 + predicted2)}</td>
+                    <td>${formatNumber(ly1)}</td>
                    <td>${formatNumber(((s1.monthTotal + s2.monthTotal) / (target1 + target2)) * 100, 1)}%</td>
                  </tr>
              </table>
             </details>
+
+            <details closed>
+              <summary>Bangur Nagar Sales Last Year </summary>
+              <table>
+                <tr>
+                  <th>Day</th>
+                  <th>Bangur Last Year (₹)</th>
+                </tr>
+                ${
+                  (() => {
+                    let totalBangurLY = 0;
+
+                    const rowsHtml = chartFullMonth.map(row => {
+                      totalBangurLY += row.BangurLastYear;
+                      return `
+                        <tr>
+                          <td>${row.day}</td>
+                          <td>${row.BangurLastYear.toLocaleString()}</td>
+                        </tr>
+                      `;
+                    }).join('');
+
+                    const totalRow = `
+                      <tr style="font-weight:bold; background:#f2f2f2">
+                        <td>Total</td>
+                        <td>${totalBangurLY.toLocaleString()}</td>
+                      </tr>
+                    `;
+
+                    return rowsHtml + totalRow;
+                  })()
+                }
+              </table>
+            </details>
+
+
+            <details closed>
+              <summary>Daily Sales vs Last Year</summary>
+              <table>
+                <tr>
+                  <th>Day</th>
+                  <th>Bangur (₹)</th>
+                  <th>Bangur Last Year (₹)</th>
+                </tr>
+                ${
+                  (() => {
+                    let totalBangur = 0;
+                    let totalBangurLY = 0;
+
+                    const rowsHtml = chartWithLastYear.map(row => {
+                      totalBangur += row.Bangur;
+                      totalBangurLY += row.BangurLastYear;
+
+                      return `
+                        <tr>
+                          <td>${row.day}</td>
+                          <td style="color:${row.Bangur > row.BangurLastYear ? 'green' : 'red'}">
+                            ${row.Bangur.toLocaleString()}
+                          </td>
+                          <td>${row.BangurLastYear.toLocaleString()}</td>
+                        </tr>
+                      `;
+                    }).join('');
+
+                    // Add total row at the end
+                    const totalRow = `
+                      <tr style="font-weight:bold; background:#f2f2f2; color:${totalBangur > totalBangurLY ? 'green' : 'red'}">
+                        <td>Total</td>
+                        <td>${totalBangur.toLocaleString()}</td>
+                        <td>${totalBangurLY.toLocaleString()}</td>
+                      </tr>
+                    `;
+
+                    return rowsHtml + totalRow;
+                  })()
+                }
+              </table>
+            </details>
+
+
+
 
              <details>
                <summary>Sales Per Day - Bar Chart</summary>
