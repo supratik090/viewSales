@@ -174,6 +174,20 @@ async function getMonthTotalReturns(db, startOfMonth, endOfMonth) {
   return result.length ? result[0].monthTotalReturns : 0;
 }
 
+async function getMonthAdjustment(db, startOfMonth, endOfMonth) {
+  const result = await db.collection('bills').aggregate([
+    { $match: { date: { $gte: startOfMonth, $lte: endOfMonth } } },
+    {
+      $group: {
+        _id: null,
+        totalAdjustment: { $sum: "$adjustment" }
+      }
+    }
+  ]).toArray();
+
+  return result.length ? result[0].totalAdjustment : 0;
+}
+
 
 
 app.get('/sales', async (req, res) => {
@@ -181,7 +195,7 @@ app.get('/sales', async (req, res) => {
  const { month: monthParam } = req.query;
     const { startOfMonth, endOfMonth, year, month } = getMonthRange(monthParam);
 
-const [s1, s2, p1, p2, g1, g2, lastBills1, lastBills2,r1,r2] = await Promise.all([
+const [s1, s2, p1, p2, g1, g2, lastBills1, lastBills2,r1,r2, adj1, adj2] = await Promise.all([
   getSalesSummary(db1,startOfMonth, endOfMonth),
   getSalesSummary(db2,startOfMonth, endOfMonth),
   getPaymentModeBreakdown(db1,startOfMonth, endOfMonth),
@@ -191,7 +205,9 @@ const [s1, s2, p1, p2, g1, g2, lastBills1, lastBills2,r1,r2] = await Promise.all
   getLastBills(db1),
   getLastBills(db2),
    getMonthTotalReturns(db1, startOfMonth, endOfMonth), // returns total for Bangur
-  getMonthTotalReturns(db2, startOfMonth, endOfMonth)
+  getMonthTotalReturns(db2, startOfMonth, endOfMonth),
+   getMonthAdjustment(db1, startOfMonth, endOfMonth),
+    getMonthAdjustment(db2, startOfMonth, endOfMonth),
 
 ]);
 
@@ -493,9 +509,12 @@ if (selectedYear > currentYear || (selectedYear === currentYear && selectedMonth
 
                      const bangurReturns = r1;
                      const vikhroliReturns = r2;
+                    const bangurAdjustment = adj1;
+                    const vikhroliAdjustment = adj2;
 
-                     const bangurNet = totalBangurProfit - bangurExpense -bangurReturns;
-                     const vikhroliNet = totalVikhroliProfit - vikhroliExpense- vikhroliReturns;
+                    const bangurNet = totalBangurProfit - bangurExpense - bangurReturns ;
+                    const vikhroliNet = totalVikhroliProfit - vikhroliExpense - vikhroliReturns ;
+
                      const bangurNetPct = totalBangurProfit ? ((bangurNet / totalBangurProfit) * 100).toFixed(2) : 0;
                      const vikhroliNetPct = totalVikhroliProfit ? ((vikhroliNet / totalVikhroliProfit) * 100).toFixed(2) : 0;
                      const totalGross = totalBangurProfit + totalVikhroliProfit;
@@ -554,10 +573,21 @@ if (selectedYear > currentYear || (selectedYear === currentYear && selectedMonth
                          const c1 = g1.find(x => x._id === cat) || { grossSales: 0, profit: 0 };
                          const c2 = g2.find(x => x._id === cat) || { grossSales: 0, profit: 0 };
 
+                             // --- Add adjustment only to Cake gross sales ---
+                             if (cat === "Cake") {
+                               c1.grossSales += adj1 || 0;
+                               c2.grossSales += adj2 || 0;
+                             }
+
                          totalBangurGross += c1.grossSales;
                          totalBangurProfit += c1.profit;
                          totalVikhroliGross += c2.grossSales;
                          totalVikhroliProfit += c2.profit;
+
+                            // Add adjustment ONLY for Cake
+                             const adjBangur = cat === "Cake" ? adj1 : 0;
+                             const adjVikhroli = cat === "Cake" ? adj2 : 0;
+                             const totalAdj = adjBangur + adjVikhroli;
 
                          return `
                            <tr>
