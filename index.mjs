@@ -242,6 +242,7 @@ if (selectedYear > currentYear || (selectedYear === currentYear && selectedMonth
 
     const avg1 = s1.monthTotal / daysPassed;
     const avg2 = s2.monthTotal / daysPassed;
+    const total = s1.todaySales + s2.todaySales;
     const predicted1 = avg1 * totalDays;
     const predicted2 = avg2 * totalDays;
 
@@ -324,12 +325,248 @@ chartFullMonth.forEach(row => {
   ly1 += row.BangurLastYear;
 });
 
+    // Detect AJAX refresh (only send table + timestamp)
+    if (req.headers["x-requested-with"] === "XMLHttpRequest") {
+      return res.send(`
+        <details closed>
+                      <summary>Last 5 Bills (Today)</summary>
 
+                      <h3>Bangur Nagar</h3>
+                      <table>
+                        <tr>
+                          <th>Time</th>
+                          <th>Cart Items</th>
+                          <th>Amount (₹)</th>
+                          <th>Payment Mode</th>
+                         </tr>
+                        ${lastBills1.map(b => `
+                          <tr>
+                          <td>${new Date(b.date).toLocaleTimeString("en-IN", {
+                                 timeZone: "Asia/Kolkata",
+                                 hour: "2-digit",
+                                 minute: "2-digit"
+                               })}
+                          </td>
+               <td>
+                                    ${b.cartItems.map(i => `<span>${i.name}</span>`).join(", ")}
+                                 </td>
+                            <td>${b.totalAmount.toLocaleString()}</td>
+                            <td>${b.paymentMode}</td>
+                           </tr>
+                        `).join('')}
+                      </table>
+
+                      <h3>Vikhroli</h3>
+                      <table>
+                        <tr>
+                          <th>Time</th>
+                          <th>Cart Items</th>
+                          <th>Amount (₹)</th>
+                          <th>Payment Mode</th>
+                        </tr>
+                        ${lastBills2.map(b => `
+                          <tr>
+
+                            <td>${new Date(b.date).toLocaleTimeString("en-IN", {
+                                   timeZone: "Asia/Kolkata",
+                                   hour: "2-digit",
+                                   minute: "2-digit"
+                                 })}
+                            </td>
+
+                                                  <td>
+                                                       ${b.cartItems.map(i => `<span>${i.name}</span>`).join(", ")}
+                                                   </td>
+                            <td>${b.totalAmount.toLocaleString()}</td>
+                            <td>${b.paymentMode}</td>
+                          </tr>
+                        `).join('')}
+                      </table>
+                    </details>
+      `);
+    }
 
      res.send(`
          <html>
            <head>
              <title>Sales Dashboard</title>
+<script>
+  const SOUND_URL = "https://actions.google.com/sounds/v1/cartoon/wood_plank_flicks.ogg";
+  const audio = new Audio(SOUND_URL);
+  let soundEnabled = false;
+  let selectedVoice = null;
+
+  // Last known rows
+  let lastBangurRows = [];
+  let lastVikhroliRows = [];
+
+// 🎙 Pick Indian English female voice
+function pickIndianFemaleVoice() {
+  const voices = window.speechSynthesis.getVoices();
+  if (!voices.length) return null;
+
+  // Prefer Indian English female-sounding names
+  const indianEnglishFemale = voices.find(v =>
+    /en-IN/i.test(v.lang) && /(Heera|female|woman|girl|F)/i.test(v.name)
+  );
+
+  // Try Google English (India)
+  const googleIndianEnglish = voices.find(v =>
+    /Google\s*English\s*\(India\)/i.test(v.name)
+  );
+
+  // Fallback to any English (India) voice
+  const fallbackEnglishIndian = voices.find(v => /en-IN/i.test(v.lang));
+
+  // Absolute fallback to first English voice (any accent)
+  const fallbackEnglish = voices.find(v => /^en-/i.test(v.lang));
+
+  return indianEnglishFemale || googleIndianEnglish || fallbackEnglishIndian || fallbackEnglish || voices[0];
+}
+
+
+  window.speechSynthesis.onvoiceschanged = function () {
+    selectedVoice = pickIndianFemaleVoice();
+  };
+
+  // 🟢 Enable sound button
+  window.addEventListener("load", () => {
+    const btn = document.createElement("button");
+    btn.textContent = "🔊 Enable Sound Alerts";
+    btn.style.position = "fixed";
+    btn.style.bottom = "10px";
+    btn.style.right = "10px";
+    btn.style.zIndex = "9999";
+    btn.style.padding = "8px 12px";
+    btn.style.background = "#1e90ff";
+    btn.style.color = "#fff";
+    btn.style.border = "none";
+    btn.style.borderRadius = "8px";
+    btn.style.cursor = "pointer";
+
+    btn.onclick = () => {
+      soundEnabled = true;
+      audio.play().catch(() => {});
+      const initUtter = new SpeechSynthesisUtterance("Sound alerts enabled");
+      if (selectedVoice) initUtter.voice = selectedVoice;
+      window.speechSynthesis.speak(initUtter);
+      btn.remove();
+    };
+    document.body.appendChild(btn);
+  });
+
+  // 🧾 Parse one shop table (robust version)
+  function parseShopTable(table) {
+    const rows = [];
+    if (!table) return rows;
+
+    // Select all TRs except header ones
+    const trList = table.querySelectorAll("tr");
+
+    trList.forEach(tr => {
+      const thCells = tr.querySelectorAll("th");
+      if (thCells.length > 0) return; // skip header row
+
+      const cells = tr.querySelectorAll("td");
+      if (cells.length >= 4) {
+        const time = cells[0].textContent.trim();
+        const items =  cells[1].textContent.trim();
+        const amount = cells[2].textContent.trim();
+        const mode = cells[3].textContent.trim();
+
+        if (time && amount) {
+          rows.push({ time, items, amount, mode });
+        }
+      }
+    });
+
+    return rows;
+  }
+
+
+  // 🎧 Speak message
+  function speak(text) {
+    const utter = new SpeechSynthesisUtterance(text);
+    utter.lang = "en-IN";
+    utter.pitch = 1.1;
+    utter.rate = 1.0;
+    if (selectedVoice) utter.voice = selectedVoice;
+    speechSynthesis.speak(utter);
+  }
+
+  // 🔍 Check difference and announce
+  function checkDiffAndAnnounce(shop, oldRows, newRows) {
+
+    if (newRows.length === 0) return;
+
+    const newEntries = newRows.filter(
+      n => !oldRows.some(o => o.time === n.time && o.amount === n.amount)
+    );
+
+    if (newEntries.length > 0) {
+      console.log("✨ New entries for", shop, ":", newEntries);
+      newEntries.forEach(e => {
+        const msg = "Sale in " + shop + ": " + e.items + ", amount " + e.amount + " rupees.";
+        if (soundEnabled) {
+          audio.play().catch(() => {});
+          speak(msg);
+        }
+        console.log("🔊", msg);
+      });
+    }
+  }
+
+  // 🔄 Fetch and compare
+  async function fetchData() {
+    try {
+      console.log("🔄 Refreshing sales data...");
+      const res = await fetch(window.location.href, { headers: { "X-Requested-With": "XMLHttpRequest" } });
+      const html = await res.text();
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(html, "text/html");
+
+      const bangurTable = doc.querySelector("h3:nth-of-type(1) + table");
+
+
+      const vikhroliTable = doc.querySelector("h3:nth-of-type(2) + table");
+
+
+
+      const bangurRows = parseShopTable(bangurTable);
+      const vikhroliRows = parseShopTable(vikhroliTable);
+
+
+      checkDiffAndAnnounce("Bangur Nagar", lastBangurRows, bangurRows);
+      checkDiffAndAnnounce("Vikhroli", lastVikhroliRows, vikhroliRows);
+
+      lastBangurRows = bangurRows;
+      lastVikhroliRows = vikhroliRows;
+
+      // Update visible tables
+      const oldTables = document.querySelectorAll("h3 + table");
+      const newTables = doc.querySelectorAll("h3 + table");
+      if (oldTables.length === newTables.length) {
+        for (let i = 0; i < oldTables.length; i++) {
+          oldTables[i].innerHTML = newTables[i].innerHTML;
+        }
+      }
+
+    } catch (err) {
+      console.error("Error refreshing data:", err);
+    }
+  }
+
+  // ⏱ Initialize
+  window.addEventListener("load", () => {
+    const bangurTable = document.querySelector("h3:nth-of-type(1) + table");
+    const vikhroliTable = document.querySelector("h3:nth-of-type(2) + table");
+    if (bangurTable) lastBangurRows = parseShopTable(bangurTable);
+    if (vikhroliTable) lastVikhroliRows = parseShopTable(vikhroliTable);
+    setInterval(fetchData, 10000); // refresh every 10s
+  });
+</script>
+
+
              <style>
                body { font-family: Arial; margin: 2rem; }
                table { border-collapse: collapse; width: 90%; margin-bottom: 2rem; }
@@ -456,7 +693,7 @@ chartFullMonth.forEach(row => {
                  <td>Vikhroli</td>
                  <td>${s2.monthTotal.toLocaleString()}</td>
                  <td>${target2.toLocaleString()}</td>
-                 <td>${formatNumber(avg2)}</td>
+                 <td>${formatNumber(avg2)}</td>45000
                  <td>${formatNumber(predicted2)}</td>
                   <td>Nan</td>
                  <td>${formatNumber((s2.monthTotal / target2) * 100, 1)}%</td>
@@ -773,12 +1010,9 @@ chartFullMonth.forEach(row => {
              </details>
 
              <p><i>Last updated: ${new Date().toLocaleString()}</i></p>
-             <script>
 
-               setTimeout(() => {
-                 window.location.reload();
-               }, 45000);
-             </script>
+
+
              <style>
              details {
                font-size: 14px; /* keep same as tables/body */
